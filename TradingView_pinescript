@@ -1,0 +1,487 @@
+//@version=4
+
+strategy("Orca 전략 v2.8", overlay=true, calc_on_order_fills=true, max_bars_back=5000)
+
+
+//wave trend
+n1 = input(10, "Channel Length")
+n2 = input(20, "Average Length")
+ap = hlc3 
+esa = ema(ap, n1)
+d = ema(abs(ap - esa), n1)
+ci = (ap - esa) / (0.015 * d)
+wt = ema(ci, n2)
+
+//wv + st
+ap2 = hlc3 
+esa2 = ema(ap2, 5)
+d2 = ema(abs(ap2 - esa2), 5)
+ci2 = (ap2 - esa2) / (0.015 * d2)
+wt2 = ema(ci2, 30)
+
+periodK = input(72, title="%K Length", minval=1)
+smoothK = input(1, title="%K Smoothing", minval=1)
+periodD = input(3, title="%D Smoothing", minval=1)
+k1 = sma(stoch(close, high, low, periodK), smoothK)
+s = sma(k1, periodD)
+
+ws= wt2 + s -50
+
+
+//cci
+length = input(72, minval=1)
+hi = input(high,title="source")
+lo = input(low,title="source")
+tp = input(close, title="Source")
+src = (hi+lo+tp) / 3
+ma = sma(src, length)
+cci = (src - ma) / (0.015 * dev(src, length))
+c1= abs(cci)
+c2= (1000-c1)/1000
+
+//cci 변동
+src5 = (hi+lo+tp) / 3
+ma5 = sma(src5, 1152)
+cci5 = (src5 - ma5) / (0.015 * dev(src5, 1152))
+
+cci1= ((cci5+500)-(cci5[1]+500))/(cci5+500)*100
+
+//bbw
+src1 = input(close, title="Source")
+mult = input(2.0, minval=0.001, maxval=50, title="StdDev")
+basis = sma(src, length)
+dev = mult * stdev(src1, 36)
+upper = basis + dev
+lower = basis - dev
+bbw = (upper-lower)/basis*100
+
+//wt3
+ap4 = hlc3 
+esa4 = ema(ap4, 10)
+d4 = ema(abs(ap4 - esa4), 10)
+ci4 = (ap4 - esa4) / (0.015 * d4)
+wt4 = ema(ci4, 30)
+
+n3 = input(2, 'n3', minval=0.001)
+wt3 = (100-(bbw*n3))/100*wt4*c2
+
+ap5 = hlc3 
+esa5 = ema(ap5, 10)
+d5 = ema(abs(ap5 - esa5), 10)
+ci5 = (ap5 - esa5) / (0.015 * d5)
+wt5 = ema(ci5, 15)
+
+//급등봉
+m1= valuewhen(close > open, (high-open)/open*100, 0) * volume
+m2= valuewhen(close < open, (low-open)/open*100, 0) * volume
+m3= highest(m1, 30)
+m4= lowest(m2, 30)
+
+
+//MC
+period = input (240, "Period")
+period1 = input (20, "Period1")
+mc0=(ema(close[0], 72)-ema(close[1], 72))/ema(close[1], 72)*100000 
+mc1=(ema(close[0], period)-ema(close[1], period))/ema(close[1], period)*100000
+mc2=ema(mc1,288)
+mc3=ema(mc1,1152)
+mc4=highest(mc0, 432)
+mc5=highest(mc2, 288)
+mc6=barssince(crossover(mc2,0))
+
+amc0=(ema(close[0], 576)-ema(close[1], 576))/ema(close[1], 576)*100000
+amc1=(ema(close[0], 72)-ema(close[1], 72))/ema(close[1], 72)*100000   
+amc2=(ema(close[0], 240)-ema(close[1], 240))/ema(close[1], 240)*100000    
+amc3=ema(amc1,288)
+amc4=ema(amc1,1152)
+amc5=highest(amc1, 72)
+amc6=highest(amc2, 72)
+amc7=highest(amc3, 72)
+amc8=highest(amc4, 72)
+amc9=lowest(amc1, 72)
+amc10=lowest(amc2, 72)
+amc11=lowest(amc3, 72)
+amc12=lowest(amc4, 72)
+amc13 = barssince(crossunder(amc4,0))
+amc14 = barssince(crossover(amc4,0))
+amc15 = amc9 + amc10
+amc16 = amc5 + amc6
+bt = lowest(low, 864)
+
+//position
+long= highest(high, 800)
+long1= highest(high, 728)
+short= lowest(low, 800)
+short1= lowest(low, 728)
+lc1= (close-open)/open*100 > 0.6
+lc2= (close-sma(close,2016)) / sma(close,2016)*100 // 7일선 괴리
+lc3= (high-long1[72])/long1[72]*100
+
+sc1= (open-close)/close*100 > 0.6
+sc2= (sma(close, 2016) - close) / close *100 // 7일선 괴리
+sc3= (short1[72]-low)/low*100
+
+lc= lc1 and lc2 < 5
+sc= sc1 and sc2 < 5
+
+
+longcondition= lc and m1 > 10000 and high >= long and lc3 >= 0.5 and amc10 <12 and close-open > high - close and (crossover(cci1, 5) or crossover(cci1,10))
+shortcondition= sc and m2 < -10000 and low <= short and sc3 >= 0.5 and amc1 > -70 and amc6 > -12 and open-close > close - low and (crossunder(cci1, -5) or crossunder(cci1, -10))
+
+//top-bottm 조건
+longRSI= input(85, 'Exit SRSI Long (%)', minval=0.0, step=1, group='Strategy 2: Stoch RSI')
+shortRSI = input(15, 'Exit SRSI Short (%)', minval=0.0, step=1, group='Strategy 2: Stoch RSI')
+longRSI2 = input(70, 'Exit RSI Long (%)', minval=0.0, step=1, group='Strategy 3: RSI')
+shortRSI2 = input(30, 'Exit RSI Short (%)', minval=0.0, step=1, group='Strategy 3: RSI')
+rsi = rsi(close, 14)
+srsi = stoch(rsi, rsi, rsi, 14)
+k = sma(srsi, 3)
+
+longTrailPerc = input(150, 'Trail volume Long (%)', minval=0.0, step=1, group='Strategy 2: Stoch RSI') * 0.01
+shortTrailPerc = input(150, 'Trail volume Short (%)', minval=0.0, step=1, group='Strategy 2: Stoch RSI') * 0.01
+
+isRsiOB = k >= longRSI
+isRsiOS = k <= shortRSI
+isRsiOB2 = rsi >= longRSI2
+isRsiOS2 = rsi <= shortRSI2
+
+volumeRSI_condition = volume[2] > volume[3] and volume[2] > volume[4] and volume[2] > volume[5]
+condition_OB1 = isRsiOB2 and (isRsiOB or volume < ema(volume, 20) / 2) and volumeRSI_condition
+condition_OS1 = isRsiOS2 and (isRsiOS or volume < ema(volume, 20) / 2) and volumeRSI_condition
+
+condition_OB2 = volume[2] / volume[1] > (1.0 + longTrailPerc) and isRsiOB and volumeRSI_condition
+condition_OS2 = volume[2] / volume[1] > (1.0 + shortTrailPerc) and isRsiOS and volumeRSI_condition
+
+condition_OB = (condition_OB1 or condition_OB2)
+condition_OS = (condition_OS1 or condition_OS2)
+condition_OB_several = condition_OB[1] and condition_OB[2] or condition_OB[1] and condition_OB[3] or condition_OB[1] and condition_OB[4] or condition_OB[1] and condition_OB[5] or condition_OB[1] and condition_OB[6] or condition_OB[1] and condition_OB[7] 
+condition_OS_several = condition_OS[1] and condition_OS[2] or condition_OS[1] and condition_OS[3] or condition_OS[1] and condition_OS[4] or condition_OS[1] and condition_OS[5] or condition_OS[1] and condition_OS[6] or condition_OS[1] and condition_OS[7] 
+
+A = (high[0]+open[0]+low[0]+close[0])/4 * volume * 1190 / 100000000
+A2= if close > open
+    (close-open)/open*100
+else
+    (open-close)/close*100
+A3= A * A2
+A4= highest(A3, 72)
+A5= highest(A3, 144)
+//atr
+atr=highest(sma(tr, 144), 144)
+
+
+//구간
+g0=m3< 4000 and m4 > -4000 and m1 < 4000 and m2 > -4000
+g1=m3> 4000 and m3 > m4*-1
+g2=m4< -4000 and m4*-1 > m3
+
+l11=mc0 > 10 and mc1 > 10 and mc2 > 10 and g0
+l12=mc0 > 10 and mc1 > 10 and mc2 > 10 and g1
+l13=mc0 > 10 and mc1 > 10 and mc2 > 10 and g2
+l21=mc0 < 0 and mc1 > 0 and mc2 > 5 and g0 and mc3 > 5 and mc0 > -10
+l22=mc0 < 0 and mc1 > 0 and mc2 > 10 and g1
+l23=mc0 < 0 and mc1 > 0 and mc2 > 0 and g2
+l30=mc0 < 0 and mc1 < 0 and mc2 > 0 and mc6 < 100 and lowest(mc2, 576) < -10
+l31=mc0 < 0 and mc1 < 0 and mc2 > 5 and g0 and mc3 > 6 and mc4 > 54
+l32=mc0 < 0 and mc1 < 0 and mc2 > 5 and g1 and mc3 > 3 and mc4 > 54
+l33=mc0 < 0 and mc1 < 0 and mc2 > 0 and g2 and mc3 > 6 and mc4 > 54
+s11=mc0 < -5 and mc1 < 0 and mc2 < -10 and g0
+s12=mc0 < 0 and mc1 < 0 and mc2 < 0 and g1
+s13=mc0 < 5 and mc1 < 0 and mc2 < -10 and g2
+s21=mc0 > 0 and mc1 < -3 and mc2 < 0 and g0 and mc0 < 20
+s22=mc0 > 0 and mc1 < -3 and mc2 < 0 and g1
+s23=mc0 > 0 and mc1 < -3 and mc2 < 0 and g2
+s31=mc0 > 0 and mc1 > 0 and mc2 < -1 and mc3 < -1 and g0 and mc0 < 31 and mc1 < 4
+s32=mc0 > 0 and mc1 > 0 and mc2 < -1 and mc3 < -1 and g1 and mc1 < 15
+s33=mc0 > 0 and mc1 > 0 and mc2 < -1 and mc3 < -1 and g2
+d0= amc5 < 0 and amc6 < 0 and amc7 < 0
+long6=amc5 > 0 and amc6 > -10 and amc7 > 0 and amc8 < 0 and amc9 > -30 and amc1 > 10
+long7=amc5 > 0 and amc6 > -10 and amc7 > 0 and amc8 < 0 and amc9 > -30 and amc1 < 10
+long8=amc5 > 0 and amc6 > -10 and amc7 > 0 and amc8 < 0
+flatlong=amc6 > -12 and amc6 < 12 and amc7 > -11 and amc7 < 11 and amc10 > -11 and amc10 < 11 and amc11 > -11 and amc11 < 11 and abs(amc6+amc7) > abs(amc10+amc11) and amc1 > -25 and amc4 > -3 and atr < 120 and (amc6-amc8) > 2
+flatshort=amc6 > -12 and amc6 < 12 and amc7 > -11 and amc7 < 11 and amc10 > -11 and amc10 < 11 and amc11 > -11 and amc11 < 11  and abs(amc6+amc7) < abs(amc10+amc11) and amc1 < 25 and amc4 < 3 and atr < 120
+
+
+//바 카운트(클로즈 오류 방지용)
+blong4=barssince(strategy.position_entry_name == "Long4" and strategy.position_entry_name != strategy.position_entry_name[1])
+blong5=barssince(strategy.position_entry_name == "Long5" and strategy.position_entry_name != strategy.position_entry_name[1])
+blong6=barssince(strategy.position_entry_name == "Long6" and strategy.position_entry_name != strategy.position_entry_name[1])
+blong7=barssince(strategy.position_entry_name == "Long7" and strategy.position_entry_name != strategy.position_entry_name[1])
+blong8=barssince(strategy.position_entry_name == "Long8" and strategy.position_entry_name != strategy.position_entry_name[1])
+bl11=barssince(strategy.position_entry_name == "l11" and strategy.position_entry_name != strategy.position_entry_name[1])
+bl21=barssince(strategy.position_entry_name == "l21" and strategy.position_entry_name != strategy.position_entry_name[1])
+bl22=barssince(strategy.position_entry_name == "l22" and strategy.position_entry_name != strategy.position_entry_name[1])
+bl32=barssince(strategy.position_entry_name == "l32" and strategy.position_entry_name != strategy.position_entry_name[1])
+bl33=barssince(strategy.position_entry_name == "l33" and strategy.position_entry_name != strategy.position_entry_name[1])
+
+bshort4=barssince(strategy.position_entry_name == "Short4" and strategy.position_entry_name != strategy.position_entry_name[1])
+bshort5=barssince(strategy.position_entry_name == "Short5" and strategy.position_entry_name != strategy.position_entry_name[1])
+bs11=barssince(strategy.position_entry_name == "s11" and strategy.position_entry_name != strategy.position_entry_name[1])
+bs13=barssince(strategy.position_entry_name == "s13" and strategy.position_entry_name != strategy.position_entry_name[1])
+bs22=barssince(strategy.position_entry_name == "s22" and strategy.position_entry_name != strategy.position_entry_name[1])
+bs31=barssince(strategy.position_entry_name == "s31" and strategy.position_entry_name != strategy.position_entry_name[1])
+bs32=barssince(strategy.position_entry_name == "s32" and strategy.position_entry_name != strategy.position_entry_name[1])
+
+//다이버전스
+lbR = input(title="Pivot Lookback Right", defval=1)
+lbL = input(title="Pivot Lookback Left", defval=5)
+rangeUpper = input(title="Max of Lookback Range", defval=60)
+rangeLower = input(title="Min of Lookback Range", defval=5)
+plotBull = input(title="Plot Bullish", defval=true)
+plotHiddenBull = input(title="Plot Hidden Bullish", defval=false)
+plotBear = input(title="Plot Bearish", defval=true)
+
+osc = rsi(close, 14)
+
+plFound = na(pivotlow(osc, lbL, lbR)) ? false : true
+phFound = na(pivothigh(osc, lbL, lbR)) ? false : true
+_inRange(cond) =>
+    bars = barssince(cond == true)
+    rangeLower <= bars and bars <= rangeUpper
+
+//------------------------------------------------------------------------------
+// Regular Bullish
+// Osc: Higher Low
+
+oscHL = osc[lbR] > valuewhen(plFound, osc[lbR], 1) and _inRange(plFound[1])
+
+// Price: Lower Low
+
+priceLL = low[lbR] < valuewhen(plFound, low[lbR], 1)
+bullCond = plotBull and priceLL and oscHL and plFound and osc < 40
+blc=valuewhen(bullCond, close, 0)
+blc2=valuewhen(plFound , close, 0)
+
+//------------------------------------------------------------------------------
+// Regular Bearish
+// Osc: Lower High
+
+oscLH = osc[lbR] < valuewhen(phFound, osc[lbR], 1) and _inRange(phFound[1])
+
+// Price: Higher High
+
+priceHH = high[lbR] > valuewhen(phFound, high[lbR], 1)
+
+bearCond = plotBear and priceHH and oscLH and phFound and osc > 60
+
+brc=valuewhen(bearCond , close, 0)
+brc2=valuewhen(phFound , close, 0)
+
+
+//괴리-ma전략
+mald=(high-sma(close,200))/sma(close,200)*100
+mald2=highest(mald,144)
+masd=(sma(close,200)-low)/low*100
+masd2=highest(masd,144)
+
+//롱조건-ma전략
+malbars=barssince(crossover(amc4,-1))+1 
+malbars2= nz(malbars,1)
+
+malongc= malbars2 > 100 and amc4 > 0 and sma(close, 200) < sma(close, 99) and crossunder(low, sma(close,200)+1-20)
+malcount= if malongc  
+    1
+else
+    0
+malcount2= highest(malcount, malbars2)
+
+malong= malbars2 > 100 and amc4 > 0 and sma(close, 200) < sma(close, 99) and crossunder(low, sma(close,200)+20) and malcount2[1] < 1
+
+//숏조건-ma전략
+masbars=barssince(crossunder(amc4,1))+1 
+masbars2= nz(masbars,1)
+
+mashortc= masbars2 > 100 and amc4 < 0 and sma(close, 200) > sma(close, 99) and crossover(high, sma(close,200)-20)
+mascount= if mashortc  
+    1
+else
+    0
+mascount2= highest(mascount, masbars2)
+
+mashort= masbars2 > 100 and amc4 < 0 and sma(close, 200) > sma(close, 99) and crossover(high, sma(close,200)-20) and mascount2[1] < 1
+
+
+
+//롱 진입 신호
+strategy.entry("LongF", strategy.long, when= flatlong and cci1 > -5 and (low < lowest(low,100)[44]*1.001 and crossunder(wt5, -60)) or (wt5 < -60 and crossunder(low, lowest(low,100)[44]*1.001)) and flatlong , qty=(strategy.equity/close)*20)
+strategy.entry("Long0", strategy.long, when= longcondition, qty=(strategy.equity/close)*20)
+strategy.entry("Long1", strategy.long, when= mc1 > 3 and mc1 < 10 and mc2 > 0 and mc3 > 0 and mc4 > 14 and crossunder(ws, -70), qty=(strategy.equity/close)*20)
+strategy.entry("Long2", strategy.long, when= mc1 > 10 and mc1 < 20 and mc3 > 5 and mc5 < 1500 and crossunder(wt, -55), qty=(strategy.equity/close)*20)
+strategy.entry("l31", strategy.long, when= l31 and crossunder(wt2, -35), qty=(strategy.equity/close)*20)
+
+//롱 청산 신호
+longftake= strategy.position_avg_price * 1.0029
+long0take= strategy.position_avg_price * 1.027
+long1take= strategy.position_avg_price * 1.0087
+long2take= strategy.position_avg_price * 1.01125
+long3take= strategy.position_avg_price * 1.0045
+long4take= strategy.position_avg_price * 1.0087
+long5take= strategy.position_avg_price * 1.0087
+long6take= strategy.position_avg_price * 1.0162
+long7take= strategy.position_avg_price * 1.0162
+long8take= strategy.position_avg_price * 1.01125
+
+longfstop= strategy.position_avg_price * 0.983
+long0stop= strategy.position_avg_price * 0.99
+long1stop= strategy.position_avg_price * 0.987
+long2stop= strategy.position_avg_price * 0.99
+long3stop= strategy.position_avg_price * 0.984
+long4stop= strategy.position_avg_price * 0.99
+long5stop= strategy.position_avg_price * 0.99
+long6stop= strategy.position_avg_price * 0.99
+long7stop= strategy.position_avg_price * 0.99
+long8stop= strategy.position_avg_price * 0.99
+
+
+longtake= if (highest(close,144)-lowest(low, 144))/lowest(low, 144)*100>2
+    strategy.position_avg_price * 1.01
+else
+    strategy.position_avg_price * 1.0058
+ 
+longstop= strategy.position_avg_price * 0.99
+
+strategy.exit(id="Exit LongF", when=strategy.position_entry_name == "LongF", limit=longftake, stop=longfstop)
+strategy.exit(id="Exit Long0", when=strategy.position_entry_name == "Long0", limit=long0take, stop=long0stop)
+strategy.exit(id="Exit Long1", when=strategy.position_entry_name == "Long1", limit=long1take, stop=long1stop)
+strategy.exit(id="Exit Long2", when=strategy.position_entry_name == "Long2", limit=long2take, stop=long2stop)
+strategy.exit(id="Exit Long3", when=strategy.position_entry_name == "Long3", limit=long3take, stop=long3stop)
+strategy.exit(id="Exit Long4", when=strategy.position_entry_name == "Long4", limit=long4take, stop=long4stop)
+strategy.exit(id="Exit Long5", when=strategy.position_entry_name == "Long5", limit=long5take, stop=long5stop)
+strategy.exit(id="Exit Long6", when=strategy.position_entry_name == "Long6", limit=long6take, stop=long6stop)
+strategy.exit(id="Exit Long7", when=strategy.position_entry_name == "Long7", limit=long7take, stop=long7stop)
+strategy.exit(id="Exit Long8", when=strategy.position_entry_name == "Long8", limit=long8take, stop=long8stop)
+
+strategy.exit(id="Exit l11", when=strategy.position_entry_name == "l11", limit=longtake, stop=longstop)
+strategy.exit(id="Exit l21", when=strategy.position_entry_name == "l21", limit=longtake, stop=longstop)
+strategy.exit(id="Exit l22", when=strategy.position_entry_name == "l22", limit=longtake, stop=longstop)
+strategy.exit(id="Exit l31", when=strategy.position_entry_name == "l31", limit=longtake, stop=longstop)
+strategy.exit(id="Exit l32", when=strategy.position_entry_name == "l32", limit=longtake, stop=longstop)
+strategy.exit(id="Exit l33", when=strategy.position_entry_name == "l33", limit=longtake, stop=longstop)
+
+strategy.close("LongF", when=strategy.position_entry_name == "LongF" and crossover(wt5, 25), comment="Close LongF")
+strategy.close("Long0", when=strategy.position_entry_name == "Long0" and crossover(cci1, 5), comment="Close Long0")
+strategy.close("Long1", when=strategy.position_entry_name == "Long1" and (mc1 > 0 and mc1 < 10 and mc2 > 0 and crossover(wt, 50)) or (mc1 > 10 and mc1 < 20 and crossover(wt, 60)) or (mc1 > 20 and crossover(wt, 70)) or crossunder(mc1, -5), comment="Close Long1")
+strategy.close("Long2", when=strategy.position_entry_name == "Long2" and (mc1 > 0 and mc1 < 10 and mc2 > 0 and crossover(wt, 30)) or (mc1 > 10 and mc1 < 20 and crossover(wt, 30)) or (mc1 > 20 and crossover(wt, 30)) or crossunder(mc1, 5), comment="Close Long2")
+strategy.close("Long3", when=strategy.position_entry_name == "Long3" and (mc1 > 0 and mc1 < 10 and mc2 > 0 and crossover(wt, 30)) or (mc1 > 10 and mc1 < 20 and crossover(wt, 30)) or (mc1 > 20 and crossover(wt, 30)) or crossunder(mc1, 15), comment="Close Long3")
+strategy.close("Long4", when=strategy.position_entry_name == "Long4" and (crossover(wt, 10) or (crossunder(wt, -45) and blong4 > 2)), comment="Close Long4")
+strategy.close("Long5", when=strategy.position_entry_name == "Long5" and (crossover(wt, 50) or (crossunder(wt, -65) and blong5 > 2)), comment="Close Long5")
+strategy.close("Long6", when=strategy.position_entry_name == "Long6" and (crossover(wt3, 15) or (crossunder(wt3, -25) and blong6 > 2)), comment="Close Long6")
+strategy.close("Long7", when=strategy.position_entry_name == "Long7" and (crossover(wt3, 15) or (crossunder(wt3, -35) and blong7 > 2)), comment="Close Long7")
+strategy.close("Long8", when=strategy.position_entry_name == "Long8" and (crossover(wt3, 10) or (crossunder(wt3, -50) and blong8 > 2)), comment="Close Long8")
+
+strategy.close("l11", when=strategy.position_entry_name == "l11" and (crossover(wt2,20) or (crossunder(wt2, -36) and bl11 > 2)), comment="Close l11")
+strategy.close("l21", when=strategy.position_entry_name == "l21" and (crossover(wt2,14) or (crossunder(wt2, -50) and bl21 > 2) or crossover(wt,20)), comment="Close l21")
+strategy.close("l22", when=strategy.position_entry_name == "l22" and (crossover(wt2,20) or (crossunder(wt2, -45) and bl22 > 2)), comment="Close l22")
+strategy.close("l31", when=strategy.position_entry_name == "l31" and (crossover(wt2,20) or crossunder(wt2, -50)), comment="Close l31")
+strategy.close("l32", when=strategy.position_entry_name == "l32" and (crossover(wt2,20) or (crossunder(wt2, -50) and bl32 > 2)), comment="Close l32")
+strategy.close("l33", when=strategy.position_entry_name == "l33" and (crossover(wt2,8) or (crossunder(wt2, -50) and bl33 > 2)), comment="Close l33")
+
+//숏 진입 신호 
+strategy.entry("Short1", strategy.short, when= mc1 < -5 and mc1 > -10 and mc2 < -6 and crossover(wt, 50) and A5 < 25000, qty=(strategy.equity/close)*20)
+strategy.entry("Short2", strategy.short, when= mc1 < -10 and mc1 > -20 and crossover(wt, 49) and A5 < 25000, qty=(strategy.equity/close)*20)
+strategy.entry("Short3", strategy.short, when= mc1 < -20 and mc3 < -3 and cci < 0 and crossover(wt, 20) and A5 < 25000, qty=(strategy.equity/close)*20)
+
+strategy.entry("s22", strategy.short, when= s22 and crossover(wt2, 40), qty=(strategy.equity/close)*20)
+
+//숏 청산 신호
+shortftake= strategy.position_avg_price * 0.9913
+short0take= strategy.position_avg_price * 0.97
+d0sstake= strategy.position_avg_price * 0.955
+d0stake= strategy.position_avg_price * 0.985
+short1take= strategy.position_avg_price * 0.9913
+short2take= strategy.position_avg_price * 0.991
+short3take= strategy.position_avg_price * 0.985
+short4take= strategy.position_avg_price * 0.9913
+short5take= strategy.position_avg_price * 0.9913
+
+shortfstop= strategy.position_avg_price * 1.005
+short0stop= strategy.position_avg_price * 1.015
+d0ssstop= strategy.position_avg_price * 1.01
+d0sstop= strategy.position_avg_price * 1.01
+short1stop= strategy.position_avg_price * 1.01
+short2stop= strategy.position_avg_price * 1.01
+short3stop= strategy.position_avg_price * 1.01
+short4stop= strategy.position_avg_price * 1.01
+short5stop= strategy.position_avg_price * 1.01
+
+
+shorttake= if (highest(close,144)-lowest(low, 144))/lowest(low, 144)*100>2
+    strategy.position_avg_price * 0.99
+else
+    strategy.position_avg_price * 0.9942
+
+shortstop= strategy.position_avg_price * 1.01
+
+strategy.exit(id="Exit d0ss", when=strategy.position_entry_name == "d0ss", limit=d0sstake, stop=d0ssstop)
+strategy.exit(id="Exit d0s", when=strategy.position_entry_name == "d0s", limit=d0stake, stop=d0sstop)
+strategy.exit(id="Exit Short1", when=strategy.position_entry_name == "Short1", limit=short1take, stop=short1stop)
+strategy.exit(id="Exit Short2", when=strategy.position_entry_name == "Short2", limit=short2take, stop=short2stop)
+strategy.exit(id="Exit Short3", when=strategy.position_entry_name == "Short3", limit=short3take, stop=short3stop)
+strategy.exit(id="Exit Short4", when=strategy.position_entry_name == "Short4", limit=short4take, stop=short4stop)
+strategy.exit(id="Exit Short5", when=strategy.position_entry_name == "Short5", limit=short5take, stop=short5stop)
+
+strategy.exit(id="Exit s11", when=strategy.position_entry_name == "s11", limit=shorttake, stop=shortstop)
+strategy.exit(id="Exit s13", when=strategy.position_entry_name == "s13", limit=shorttake, stop=shortstop)
+strategy.exit(id="Exit s22", when=strategy.position_entry_name == "s22", limit=shorttake, stop=shortstop)
+strategy.exit(id="Exit s31", when=strategy.position_entry_name == "s31", limit=shorttake, stop=shortstop)
+strategy.exit(id="Exit s32", when=strategy.position_entry_name == "s32", limit=shorttake, stop=shortstop)
+
+
+strategy.close("d0ss", when=strategy.position_entry_name == "d0ss" and (crossunder(wt3,-45)), comment="Close d0ss")
+strategy.close("d0s", when=strategy.position_entry_name == "d0s" and (crossunder(wt3,-25)), comment="Close d0s")
+strategy.close("Short1", when=strategy.position_entry_name == "Short1" and (mc1 < 0 and mc1 > -10 and crossunder(wt, -60)) or (mc1 < -10 and mc1 > -20 and crossunder(wt, -60)) or (mc1 < -20 and crossunder(wt, -60)) or crossover(mc1, 5) or crossover(wt,0), comment="Close Short1")
+strategy.close("Short2", when=strategy.position_entry_name == "Short2" and (mc1 < 0 and mc1 > -10 and crossunder(wt, -60)) or (mc1 < -10 and mc1 > -20 and crossunder(wt, -60)) or (mc1 < -20 and crossunder(wt, -60)) or crossover(mc1, -5), comment="Close Short2")
+strategy.close("Short3", when=strategy.position_entry_name == "Short3" and (mc1 < 0 and mc1 > -10 and crossunder(wt, -60)) or (mc1 < -10 and mc1 > -20 and crossunder(wt, -60)) or (mc1 < -20 and crossunder(wt, -60)) or crossover(mc1, -15), comment="Close Short3")
+strategy.close("Short4", when=strategy.position_entry_name == "Short4" and (crossunder(wt,-40) or (crossover(mc1, 10) and bshort4 > 2) or crossover(wt, 54)), comment="Close Short4")
+strategy.close("Short5", when=strategy.position_entry_name == "Short5" and (crossunder(wt,-40) or (crossover(mc1, 25) and bshort5 > 2)), comment="Close Short5")
+
+strategy.close("s11", when=strategy.position_entry_name == "s11" and crossunder(wt2, -19) or (crossover(wt2,19) and bs11 > 2), comment="Close s11")
+strategy.close("s13", when=strategy.position_entry_name == "s13" and crossunder(wt2, -20) or (crossover(wt,50) and bs13 > 2), comment="Close s13")
+strategy.close("s22", when=strategy.position_entry_name == "s22" and crossunder(wt2, -10) or (crossover(wt2,40) and bs22 > 2), comment="Close s22")
+strategy.close("s31", when=strategy.position_entry_name == "s31" and crossunder(wt2, -15) or (crossover(wt2, 35) and bs31 > 2), comment="Close s31")
+strategy.close("s32", when=strategy.position_entry_name == "s32" and crossunder(wt2, -15) or (crossover(wt2,50) and bs32 > 2), comment="Close s32") 
+
+//다이버전스 매매
+//롱
+
+bulltake= strategy.position_avg_price * 1.015
+bullstop= strategy.position_avg_price * 0.9925
+strategy.exit(id="Exit Bull", when=strategy.position_entry_name == "Bull", limit=bulltake, stop=bullstop)
+strategy.close("Bull", when=strategy.position_entry_name == "Bull" and crossover(osc,59), comment="Close Bull")
+//숏
+strategy.entry("Bear", strategy.short, when=bearCond and amc0 < -3 and A5 < 25000, qty=(strategy.equity/close)*20)
+beartake= strategy.position_avg_price * 0.985
+bearstop= strategy.position_avg_price * 1.0156
+strategy.exit(id="Exit Bear", when=strategy.position_entry_name == "Bear", limit=beartake, stop=bearstop)
+strategy.close("Bear", when=strategy.position_entry_name == "Bear" and crossunder(osc,41), comment="Close Bear")
+
+
+//Top-Bottom 매매
+//롱
+strategy.entry("Bottom", strategy.long, when= condition_OS_several and amc0 > 2 and amc4 > 0 and amc3 > amc4 and A4 < 3000, qty=(strategy.equity/close)*20)
+bottomtake= strategy.position_avg_price * 1.0064
+bottomstop= strategy.position_avg_price * 0.9899
+strategy.exit(id="Exit Bottom", when=strategy.position_entry_name == "Bottom", limit=bottomtake, stop=bottomstop)
+strategy.close("Bottom", when=strategy.position_entry_name == "Bottom" and crossover(wt,34), comment="Close Bottom")
+
+//숏
+strategy.entry("Top", strategy.short, when=condition_OB_several and amc0 < -2 and amc4 < 0 and amc3 < amc4 and A4 < 3000, qty=(strategy.equity/close)*20)
+toptake= strategy.position_avg_price * 0.9925
+topstop= strategy.position_avg_price * 1.0087
+strategy.exit(id="Exit Top", when=strategy.position_entry_name == "Top", limit=toptake, stop=topstop)
+strategy.close("Top", when=strategy.position_entry_name == "Top" and crossunder(wt,-34), comment="Close Top")
+
+
+//MA 매매
+//롱
+strategy.entry("maLong", strategy.long, when=malong and mald2 > 3.5, qty=(strategy.equity/close)*20)
+maltake= strategy.position_avg_price * 1.0117
+malstop= strategy.position_avg_price * 0.986
+strategy.exit(id="Exit maLong", when=strategy.position_entry_name == "maLong", limit=maltake, stop=malstop)
+strategy.close("maLong", when=strategy.position_entry_name == "maLong" and crossover(wt,34), comment="Close maLong")
+
+//숏
+
+mastake= strategy.position_avg_price * 0.9883
+masstop= strategy.position_avg_price * 1.007
+strategy.exit(id="Exit maShort", when=strategy.position_entry_name == "maShort", limit=mastake, stop=masstop)
+strategy.close("maShort", when=strategy.position_entry_name == "maShort" and crossunder(wt,-34), comment="Close maShort")
